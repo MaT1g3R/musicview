@@ -12,6 +12,7 @@ import click
 @click.argument('name')
 def main(directory: Path, data: Path, name: str):
     db_file = data / '{}.db'.format(name)
+    db_file.touch()
     conn = connect(str(db_file))
     init_db(conn)
 
@@ -21,13 +22,13 @@ def init_db(conn):
         """
         CREATE TABLE IF NOT EXISTS library (
         id INTEGER PRIMARY KEY,
-        path VARCHAR NOT NULL ,
+        path VARCHAR NOT NULL,
         title VARCHAR,
         genre VARCHAR,
         artist VARCHAR,
         length INT,
-        favourite  BOOLEAN NOT NULL ,
-        listened BOOLEAN NOT NULL DEFAULT 0
+        favourite BOOLEAN DEFAULT 0 NOT NULL,
+        listen_count INT DEFAULT 0
         );
         """
     )
