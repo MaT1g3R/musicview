@@ -24,13 +24,19 @@ from shutil import which
 from sqlite3 import Connection, connect
 from subprocess import DEVNULL, PIPE, Popen, run
 from sys import stderr
-from threading import RLock, Thread
+from threading import Condition, RLock, Thread
+from time import sleep
 from typing import Tuple
 
 import click
-import progressbar as pg
 from halo import Halo
 from mutagen import File, MutagenError
+from tqdm import tqdm
+
+
+def format_time(seconds):
+    mins, secs = divmod(seconds, 60)
+    return '{}:{:02d}'.format(int(mins), round(secs))
 
 
 class MetaData(namedtuple('MetaData', ['path', 'title', 'genre', 'artist', 'album', 'length'])):
@@ -46,20 +52,21 @@ class MetaData(namedtuple('MetaData', ['path', 'title', 'genre', 'artist', 'albu
         """
         return cls(path, None, None, None, None, None)
 
+    def format_time(self):
+        if self.length:
+            return format_time(self.length)
+        else:
+            return None
+
     def format(self):
         title = self.title or self.path
-        if self.length:
-            mins, secs = divmod(self.length, 60)
-            length = '{}:{:02d}'.format(int(mins), round(secs))
-        else:
-            length = None
+        length = self.format_time()
         lst = list(self[1:])
         lst[0] = title
         lst[-1] = length
-        return '\n'.join(
-            ['{}: {}'.format(s, v) for s, v in
-             zip(['Title', 'Genre', 'Artist', 'Album', 'Length'], lst) if v]
-        )
+        return ['{}: {}'.format(s, v) for s, v in
+                zip(['Title', 'Genre', 'Artist', 'Album', 'Length'], lst)
+                if v]
 
 
 def get_supported_formats(ffplay):
@@ -153,49 +160,31 @@ def update_db(path: Path, conn: Connection, ffplay: str):
         cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
         cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
         cur.execute('DROP TABLE tmp;')
-
-    bar = pg.ProgressBar(
-        widgets=[
-            'Updating...',
-            '(',
-            pg.Percentage(),
-            ' ',
-            pg.Counter(),
-            '/',
-            str(len(songs)),
-            ' )',
-            pg.Bar(marker='█'),
-            '[',
-            pg.Timer(),
-            ' ',
-            pg.AdaptiveETA(),
-            ']'
-        ]
-    )
-    for song in bar(songs):
-        metadata = song_metadata(song)
-        cur.execute('SELECT * FROM library WHERE path=?', (metadata.path,))
-        if not cur.fetchone():
-            cur.execute(
-                """
-                INSERT INTO library (path, title, genre, artist, album, length)
-                VALUES (?, ?, ?, ?, ?, ?);
-                """, metadata
-            )
-        else:
-            cur.execute(
-                """
-                UPDATE library SET
-                title = ?,
-                genre = ?,
-                artist = ?,
-                album = ?,
-                length = ?
-                WHERE path=?;
-                """, tuple(chain(metadata[1:], metadata[:1]))
-            )
-    conn.commit()
-    cur.close()
+    with tqdm(songs, total=len(songs), desc='Updating...', unit='songs') as bar:
+        for song in bar:
+            metadata = song_metadata(song)
+            cur.execute('SELECT * FROM library WHERE path=?', (metadata.path,))
+            if not cur.fetchone():
+                cur.execute(
+                    """
+                    INSERT INTO library (path, title, genre, artist, album, length)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                    """, metadata
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE library SET
+                    title = ?,
+                    genre = ?,
+                    artist = ?,
+                    album = ?,
+                    length = ?
+                    WHERE path=?;
+                    """, tuple(chain(metadata[1:], metadata[:1]))
+                )
+        conn.commit()
+        cur.close()
 
 
 def init_db(path: Path, conn: Connection, ffplay: str):
@@ -295,19 +284,22 @@ class Player:
         self.cur_song = None
         self.cur_fav = False
         self.cur_count = 0
-        self.seek = 0
         self.ui_thread = None
-        self.lock = RLock()
+        self.db_lock = RLock()
         self.playing_proc = None
         self.stopped = False
 
-        self.paused = False
+        self.cv = Condition()
+        self.paused = True
+
+        self.time_elapsed = 0
+
+        self.height, self.width = stdscr.getmaxyx()
 
     def _play(self):
         return Popen(
-            [self.ffplay, self.cur_song.path, '-nodisp', '-autoexit', '-ss', str(self.seek)],
-            stderr=DEVNULL,
-            close_fds=True
+            [self.ffplay, self.cur_song.path, '-nodisp', '-autoexit'],
+            stderr=PIPE
         )
 
     def ui(self):
@@ -327,12 +319,25 @@ class Player:
                 self.stdscr.clear()
                 return
 
+    def progress(self):
+        while True:
+            if self.stopped:
+                return
+            with self.cv:
+                while self.paused:
+                    self.cv.wait()
+                self.display()
+                sleep(1)
+                self.time_elapsed += 1
+
     def play_next(self):
         self.playing_proc.kill()
 
     def toggle(self):
         if self.paused:
             self.playing_proc.send_signal(signal.SIGCONT)
+            with self.cv:
+                self.cv.notify()
         else:
             self.playing_proc.send_signal(signal.SIGSTOP)
         self.paused = not self.paused
@@ -342,20 +347,27 @@ class Player:
         ui = Thread(target=self.ui, name='ui', daemon=True)
         self.ui_thread = ui
         ui.start()
+        progress = Thread(target=self.progress, name='progress', daemon=True)
+        progress.start()
         while True:
+            self.paused = True
             if self.stopped:
                 return
-            self.paused = False
-            with self.lock:
+            with self.cv:
+                self.time_elapsed = 0
+            with self.db_lock:
                 self.cur_song, (self.cur_fav, self.cur_count) = next_song(self.conn)
                 self.cur_count += 1
             self.display()
             with self._play() as proc:
                 self.playing_proc = proc
+                self.paused = False
+                with self.cv:
+                    self.cv.notify()
                 proc.wait()
 
     def favourite(self, conn):
-        with self.lock:
+        with self.db_lock:
             conn.execute(
                 'UPDATE library SET favourite=? WHERE path=?',
                 (not self.cur_fav, self.cur_song.path)
@@ -365,13 +377,27 @@ class Player:
         self.display()
 
     def display(self):
-        self.stdscr.clear()
+        length = self.cur_song.length
+        total_time = self.cur_song.format_time() or '???'
+        data_pos = 3 if length else 2
+        cur_time = format_time(self.time_elapsed)
+        self.stdscr.addstr(0, 1, '[paused]' if self.paused else '[playing]')
         self.stdscr.addstr(
-            '\n'.join(
-                ['Paused' if self.paused else 'Playing',
-                 self.cur_song.format(),
-                 'Favourite: {}'.format(bool(self.cur_fav)),
-                 'Play count: {}'.format(self.cur_count)]
+            1, 1, '{}/{}'.format(cur_time, total_time)
+        )
+        if length:
+            bar_len = self.width - 4
+            prog = int(bar_len * self.time_elapsed // length) - 1
+            if prog < 0:
+                prog = 0
+            empty = bar_len - prog - 1
+            self.stdscr.addstr(2, 1, '|{}{}{}|'.format(prog * '=', '>', empty * ' '))
+        self.stdscr.addstr(
+            data_pos, 1,
+            '\n '.join(
+                self.cur_song.format() +
+                ['Favourite: {}'.format(bool(self.cur_fav)),
+                 'Play count: {}\n'.format(self.cur_count)]
             )
         )
         self.stdscr.refresh()

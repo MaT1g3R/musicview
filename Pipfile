@@ -10,7 +10,7 @@ name = "pypi"
 click = "*"
 mutagen = "*"
 halo = "*"
-"progressbar2" = "*"
+tqdm = "*"
 
 
 [dev-packages]
