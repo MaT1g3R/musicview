@@ -9,10 +9,13 @@ name = "pypi"
 
 click = "*"
 mutagen = "*"
+halo = "*"
+"progressbar2" = "*"
 
 
 [dev-packages]
 
+pytest = "*"
 
 
 [requires]

@@ -109,3 +109,5 @@ Pipfile.lock
 
 #idea
 .idea/
+
+test.db
