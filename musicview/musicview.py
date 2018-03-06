@@ -35,6 +35,13 @@ from tqdm import tqdm
 
 
 def format_time(seconds):
+    """
+    Format time in secods into human readable string
+    Args:
+        seconds: time in seconds
+    Returns:
+        The time formatted
+    """
     mins, secs = divmod(seconds, 60)
     return '{}:{:02d}'.format(int(mins), round(secs))
 
@@ -53,12 +60,23 @@ class MetaData(namedtuple('MetaData', ['path', 'title', 'genre', 'artist', 'albu
         return cls(path, None, None, None, None, None)
 
     def format_time(self):
+        """
+        Format self.length into human readable string
+        Returns:
+            The time formatted
+        """
         if self.length:
             return format_time(self.length)
         else:
             return None
 
-    def format(self):
+    def format(self) -> list:
+        """
+        Format self into a pretty printable target,
+        with one line per list
+        Returns:
+            the formatted text
+        """
         title = self.title or self.path
         length = self.format_time()
         lst = list(self[1:])
@@ -102,10 +120,11 @@ def get_songs(path: Path, formats):
             yield from get_songs(sub, formats)
 
 
-def song_metadata(path: str):
+def song_metadata(ffmpeg, path: str):
     """
     Get a song's metadata
     Args:
+        ffmpeg: ffmpeg binary
         path: path to the song
     Returns:
         The song's metadata
@@ -131,25 +150,45 @@ def song_metadata(path: str):
     try:
         tags = File(path, easy=True)
     except MutagenError:
-        return MetaData.empty(path)
+        res = MetaData.empty(path)
     else:
         if not tags:
-            return MetaData.empty(path)
-        get = lambda t, s: t.get(s, t.get(s.upper()))
-        title = to_string(get(tags, 'title'))
-        genre = to_string(get(tags, 'genre'))
-        artist = to_string(get(tags, 'artist'))
-        album = to_string(get(tags, 'album'))
-        length = tags.info.length
-        return MetaData(path, title, genre, artist, album, length)
+            res = MetaData.empty(path)
+        else:
+            get = lambda t, s: t.get(s, t.get(s.upper()))
+            title = to_string(get(tags, 'title'))
+            genre = to_string(get(tags, 'genre'))
+            artist = to_string(get(tags, 'artist'))
+            album = to_string(get(tags, 'album'))
+            length = tags.info.length
+            res = MetaData(path, title, genre, artist, album, length)
+
+    if res.length is None:  # Couldn't read length from mutagen, fallback to ffmpeg
+        proc = run([ffmpeg, '-i', path], stdout=DEVNULL, stderr=PIPE)
+        err = proc.stderr.decode().splitlines()
+        for line in err:
+            line = line.strip().lower()
+            if line.startswith('duration'):
+                try:
+                    time = line.split()[1].rstrip(',')
+                    hour, minutes, seconds = time.split(':')
+                    total = 60 * 60 * int(hour) + 60 * int(minutes) + float(seconds)
+                except Exception:
+                    return None
+                else:
+                    return MetaData(*res[:-1], total)
+        return None
+    else:
+        return res
 
 
-def update_db(path: Path, conn: Connection, ffplay: str):
+def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
     """
     Update the database
     Args:
         path: path to the music library
         conn: database connection
+        ffmpeg: ffmpeg binary
         ffplay: ffplay binary
     """
     formats = set(get_supported_formats(ffplay))
@@ -162,7 +201,10 @@ def update_db(path: Path, conn: Connection, ffplay: str):
         cur.execute('DROP TABLE tmp;')
     with tqdm(songs, total=len(songs), desc='Updating...', unit='songs') as bar:
         for song in bar:
-            metadata = song_metadata(song)
+            metadata = song_metadata(ffmpeg, song)
+            if not metadata:
+                continue
+            assert metadata.length
             cur.execute('SELECT * FROM library WHERE path=?', (metadata.path,))
             if not cur.fetchone():
                 cur.execute(
@@ -187,12 +229,13 @@ def update_db(path: Path, conn: Connection, ffplay: str):
         cur.close()
 
 
-def init_db(path: Path, conn: Connection, ffplay: str):
+def init_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
     """
     Initialize the database
     Args:
         path: path to the music directory
         conn: sqlite3 connection
+        ffmpeg: ffmpeg binary
         ffplay: ffplay binary
     """
     conn.execute(
@@ -210,7 +253,7 @@ def init_db(path: Path, conn: Connection, ffplay: str):
         """
     )
     conn.commit()
-    update_db(path, conn, ffplay)
+    update_db(path, conn, ffmpeg, ffplay)
 
 
 def check_path(path):
@@ -275,34 +318,55 @@ def next_song(conn) -> Tuple[MetaData, tuple]:
 
 
 class Player:
+    """
+    Music player class
+    """
+
     def __init__(self, data, name, ffplay, conn, stdscr):
+        """
+        Args:
+            data: path to music library
+            name: name of the music library
+            ffplay: ffplay binary
+            conn: database connection
+            stdscr: curses screen
+        """
         self.ffplay = ffplay
         self.data = data
         self.name = name
         self.conn = conn
         self.stdscr = stdscr
+        self.height, self.width = stdscr.getmaxyx()
+
         self.cur_song = None
         self.cur_fav = False
         self.cur_count = 0
-        self.ui_thread = None
-        self.db_lock = RLock()
-        self.playing_proc = None
-        self.stopped = False
-
-        self.cv = Condition()
-        self.paused = True
-
         self.time_elapsed = 0
 
-        self.height, self.width = stdscr.getmaxyx()
+        self.stopped = False
+        self.paused = True
 
-    def _play(self):
+        self.playing_proc = None
+        self.ui_thread = None
+
+        self.db_lock = RLock()
+        self.cv = Condition()
+
+    def _play(self) -> Popen:
+        """
+        Return a subprocess to play the current song
+        Returns:
+            a subprocess to play the current song
+        """
         return Popen(
-            [self.ffplay, self.cur_song.path, '-nodisp', '-autoexit'],
-            stderr=PIPE
+            [self.ffplay, '-nodisp', '-autoexit', self.cur_song.path],
+            stderr=DEVNULL
         )
 
     def ui(self):
+        """
+        UI control, meant to be ran in another thread
+        """
         keymap = {'p': 'play', '>': 'skip', 'f': 'favourite', 'q': 'quit'}
         _, conn = get_connection(self.data, self.name, True)
         while True:
@@ -320,6 +384,9 @@ class Player:
                 return
 
     def progress(self):
+        """
+        Progress bar control, meant to be ran in another thread
+        """
         while True:
             if self.stopped:
                 return
@@ -329,11 +396,19 @@ class Player:
                 self.display()
                 sleep(1)
                 self.time_elapsed += 1
+                if self.time_elapsed > self.cur_song.length:
+                    self.play_next()
 
     def play_next(self):
+        """
+        Play the next song
+        """
         self.playing_proc.kill()
 
     def toggle(self):
+        """
+        Toggle play/pause status
+        """
         if self.paused:
             self.playing_proc.send_signal(signal.SIGCONT)
             with self.cv:
@@ -344,6 +419,9 @@ class Player:
         self.display()
 
     def start(self):
+        """
+        Start the music player
+        """
         ui = Thread(target=self.ui, name='ui', daemon=True)
         self.ui_thread = ui
         ui.start()
@@ -364,9 +442,13 @@ class Player:
                 self.paused = False
                 with self.cv:
                     self.cv.notify()
-                proc.wait()
 
     def favourite(self, conn):
+        """
+        Toggle the favourite status of the current song
+        Args:
+            conn: connection to the sqlite database
+        """
         with self.db_lock:
             conn.execute(
                 'UPDATE library SET favourite=? WHERE path=?',
@@ -377,23 +459,24 @@ class Player:
         self.display()
 
     def display(self):
+        """
+        Display text on screen
+        """
         length = self.cur_song.length
-        total_time = self.cur_song.format_time() or '???'
-        data_pos = 3 if length else 2
+        total_time = self.cur_song.format_time()
         cur_time = format_time(self.time_elapsed)
         self.stdscr.addstr(0, 1, '[paused]' if self.paused else '[playing]')
         self.stdscr.addstr(
             1, 1, '{}/{}'.format(cur_time, total_time)
         )
-        if length:
-            bar_len = self.width - 4
-            prog = int(bar_len * self.time_elapsed // length) - 1
-            if prog < 0:
-                prog = 0
-            empty = bar_len - prog - 1
-            self.stdscr.addstr(2, 1, '|{}{}{}|'.format(prog * '=', '>', empty * ' '))
+        bar_len = self.width - 4
+        prog = int(bar_len * self.time_elapsed // length) - 1
+        if prog < 0:
+            prog = 0
+        empty = bar_len - prog - 1
+        self.stdscr.addstr(2, 1, '|{}{}{}|'.format(prog * '=', '>', empty * ' '))
         self.stdscr.addstr(
-            data_pos, 1,
+            3, 1,
             '\n '.join(
                 self.cur_song.format() +
                 ['Favourite: {}'.format(bool(self.cur_fav)),
@@ -434,11 +517,13 @@ path_opt = click.option(
 def cli(obj):
     """musicview, (re)discover your music library"""
     ffplay = which('ffplay')
-    if not ffplay:
-        print('ffplay not found!', file=stderr)
+    ffmpeg = which('ffmpeg')
+    if not ffplay or not ffmpeg:
+        print('ffmpeg/ffplay not found!', file=stderr)
         exit(1)
 
     obj['ffplay'] = ffplay
+    obj['ffmpeg'] = ffmpeg
 
 
 @click.command(name='list')
@@ -467,11 +552,12 @@ def play(obj, path: Path, data: Path, name: str):
     check_path(path)
     data.mkdir(exist_ok=True, parents=True)
     ffplay = obj['ffplay']
+    ffmpeg = obj['ffmpeg']
 
     init, conn = get_connection(data, name, False)
     with conn:
         if init:
-            init_db(path, conn, ffplay)
+            init_db(path, conn, ffmpeg, ffplay)
         wrapper(partial(play_music, data, name, conn, ffplay))
 
 
@@ -502,6 +588,7 @@ def update(obj, path: Path, data: Path, name: str):
     """Update an existing music library"""
     check_path(path)
     ffplay = obj['ffplay']
+    ffmpeg = obj['ffmpeg']
 
     if not name in map(lambda p: p.name.rstrip('.db'), data.iterdir()):
         print('Library "{}" does not exist!'.format(name), file=stderr)
@@ -509,7 +596,7 @@ def update(obj, path: Path, data: Path, name: str):
 
     _, conn = get_connection(data, name, True)
     with conn:
-        update_db(path, conn, ffplay)
+        update_db(path, conn, ffmpeg, ffplay)
 
 
 cli.add_command(list_)
