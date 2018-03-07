@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #  musicview, (re)discover your music library.
 #  Copyright (C) 2018 Peijun Ma
 #

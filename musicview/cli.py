@@ -35,6 +35,8 @@ path_opt = click.option(
     help='Path to the directory of your music library.'
 )
 
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 
 def check_path(path):
     """
@@ -62,7 +64,7 @@ def play_music(data, name, conn, ffplay, stdscr):
     player.start()
 
 
-@click.group()
+@click.group(context_settings=CONTEXT_SETTINGS)
 @click.pass_obj
 def cli(obj):
     """musicview, (re)discover your music library"""
