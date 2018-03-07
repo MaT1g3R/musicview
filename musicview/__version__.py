@@ -14,4 +14,11 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .cli import cli
+__title__ = 'musicview'
+__description__ = '(re)discover your music library.'
+__url__ = 'https://github.com/MaT1g3R/musicview'
+__version__ = '0.1.0'
+__author__ = 'Peijun Ma'
+__author_email__ = 'peijun.ma@protonmail.com'
+__license__ = 'GPLv3.0+'
+__copyright__ = 'Copyright (C) 2018 Peijun Ma'
