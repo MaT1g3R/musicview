@@ -23,6 +23,7 @@ What does it not do
 
 Requirements
 ============
+* Python 3.5 or later
 * `curses`
     - This should be available on most \*nix operating systems. On Windows you can try WSL
 * `ffmpeg <https://ffmpeg.org/>`_ or `avconv`
@@ -75,6 +76,7 @@ Curses interface controls (These will be configurable in a future release)
 
 TODO
 =======
+* Configuration options
 * Tests
 * Better looking cueses UI
 * asyncio?
