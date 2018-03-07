@@ -73,6 +73,12 @@ Curses interface controls (These will be configurable in a future release)
 * :code:`>` skip song
 * :code:`q` quit
 
+TODO
+=======
+* Tests
+* Better looking cueses UI
+* asyncio?
+
 License
 ========
 musicview is licensed under the terms of the GNU General Public License,
