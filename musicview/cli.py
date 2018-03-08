@@ -25,8 +25,12 @@ import click
 from .db import get_connection, init_db, update_db
 from .player import Player
 
+
+DEFAULT_CONFIG_HOME = Path.home() / '.musicview'
+CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 data_opt = click.option(
-    '-d', '--data', default=Path.home() / '.musicview', type=Path,
+    '-d', '--data', default=DEFAULT_CONFIG_HOME, type=Path,
     help='Path to directory containing data and config files'
 )
 
@@ -35,8 +39,6 @@ path_opt = click.option(
     help='Path to the directory of your music library.'
 )
 
-CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
-
 
 def check_path(path):
     """
@@ -44,6 +46,8 @@ def check_path(path):
     Args:
         path: the path to check
     """
+    if path == DEFAULT_CONFIG_HOME:
+        path.mkdir(parents=True, exist_ok=True)
     if not path.is_dir():
         print('{} is not a valid directory!'.format(path), file=stderr)
         exit(1)
