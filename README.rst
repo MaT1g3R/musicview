@@ -28,7 +28,7 @@ Requirements
     - This should be available on most \*nix operating systems. On Windows you can try WSL
 * `ffmpeg <https://ffmpeg.org/>`_ or `avconv`
     - On Linux you can obtain them via your package manager
-    - On macOS you can install `ffmpeg` using `homebrew <https://brew.sh/>`_ :code:`brew install ffmpeg`
+    - On macOS you can install `ffmpeg` using `homebrew <https://brew.sh/>`_ :code:`brew install ffmpeg --with-sdl2`
     - On Windows you can follow the instructions `here <https://ffmpeg.org/download.html>`_
 
 Installation
