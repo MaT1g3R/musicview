@@ -14,4 +14,9 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'toml'))
+import toml
+
 from .cli import cli

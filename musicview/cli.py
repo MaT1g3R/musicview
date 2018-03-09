@@ -24,6 +24,7 @@ import click
 
 from .db import get_connection, init_db, update_db
 from .player import Player
+from . import toml
 
 
 DEFAULT_CONFIG_HOME = Path.home() / '.musicview'
@@ -39,6 +40,7 @@ path_opt = click.option(
     help='Path to the directory of your music library.'
 )
 
+print = click.echo
 
 def check_path(path):
     """

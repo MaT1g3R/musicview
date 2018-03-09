@@ -62,6 +62,7 @@ setup(
     ],
     packages=[
         'musicview',
+        'toml/toml',
     ],
     install_requires=reqs,
     package_data={'': ['README.rst', 'LICENSE', 'Pipfile','Pipfile.lock']},
