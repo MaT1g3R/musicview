@@ -41,8 +41,8 @@ Or to install the latest development version, run:
 
 ::
 
-  git clone https://github.com/MaT1g3R/musicview
-  cd music view
+  git clone --recursive https://github.com/MaT1g3R/musicview
+  cd musicview
   pip install .
 
 Quick Tutorial
