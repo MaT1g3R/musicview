@@ -1,1 +1,1 @@
-include README.rst LICENSE Pipfile.lock
+include README.rst LICENSE Pipfile Pipfile.lock

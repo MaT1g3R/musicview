@@ -23,13 +23,19 @@ from subprocess import run
 
 from setuptools import setup
 
+
+HERE = Path(__file__).parent
+sys.path.append(str(HERE / 'toml'))
+import toml
+
+
 if sys.argv[-1] == 'publish':
     run(split('python setup.py sdist bdist_wheel'))
     run(split('twine upload dist/*'))
     exit()
 
-HERE = Path(__file__).parent
 
+pipfile = toml.loads((HERE / 'Pipfile').read_text())
 lock = json.loads((HERE / 'Pipfile.lock').read_text())
 readme = (HERE / 'README.rst').read_text()
 
@@ -39,7 +45,7 @@ exec((HERE / 'musicview' / '__version__.py').read_text(), about)
 reqs = [
     key + val['version'].replace('==', '>=')
     for key, val in lock['default'].items()
-    if key in ('click', 'mutagen', 'halo', 'tqdm')
+    if key in pipfile['packages']
 ]
 
 setup(
@@ -58,7 +64,7 @@ setup(
         'musicview',
     ],
     install_requires=reqs,
-    package_data={'': ['README.rst', 'LICENSE', 'Pipfile.lock']},
+    package_data={'': ['README.rst', 'LICENSE', 'Pipfile','Pipfile.lock']},
     include_package_data=True,
     python_requires=">=3.5",
     entry_points='''
