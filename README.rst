@@ -47,11 +47,12 @@ Or to install the latest development version, run:
 
 Quick Tutorial
 ================
-To use the commandline interface
+To use the command line interface
 ::
 
     → musicview --help
-    Usage: musicview [OPTIONS] COMMAND [ARGS]...
+
+    Usage: main.py [OPTIONS] COMMAND [ARGS]...
 
       musicview, (re)discover your music library
 
@@ -61,9 +62,9 @@ To use the commandline interface
     Commands:
       delete  Delete a music library
       list    List existing music libraries
+      new     Create a new music library
       play    Start playing music
       update  Update an existing music library
-
 
 The :code:`play` command will start a simple curses music player.
 
