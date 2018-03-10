@@ -17,7 +17,7 @@
 __title__ = 'musicview'
 __description__ = '(re)discover your music library.'
 __url__ = 'https://github.com/MaT1g3R/musicview'
-__version__ = '0.1.1'
+__version__ = '0.2.0'
 __author__ = 'Peijun Ma'
 __author_email__ = 'peijun.ma@protonmail.com'
 __license__ = 'GPLv3.0+'

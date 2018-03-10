@@ -17,35 +17,13 @@
 from itertools import chain
 from pathlib import Path
 from sqlite3 import Connection, connect
-from sys import stderr
 from typing import Tuple
 
-from halo import Halo
-from tqdm import tqdm
+import click
+from click import progressbar
 
 from .misc import get_songs, get_supported_formats
 from .song import MetaData, song_metadata
-
-
-def get_connection(data, name, must_exist) -> Tuple[bool, Connection]:
-    """
-    Get a database connection
-    Args:
-        data: path to the data directory
-        name: name of the music library
-        must_exist: True to assert the database already exists
-
-    Returns:
-        Wether the database is newly initialized and the connection
-    """
-    db_file = data / '{}.db'.format(name)
-    init = not db_file.is_file()
-    if must_exist and init:
-        print('Library {} does not exist!'.format(name), file=stderr)
-        exit(1)
-    db_file.touch()
-    conn = connect(str(db_file))
-    return init, conn
 
 
 def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
@@ -59,13 +37,13 @@ def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
     """
     formats = set(get_supported_formats(ffplay))
     cur = conn.cursor()
-    with Halo(text='Getting songs...', spinner='dots'):
-        songs = set(map(str, get_songs(path, formats)))
-        cur.execute('CREATE TEMP TABLE tmp (path VARCHAR PRIMARY KEY);')
-        cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
-        cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
-        cur.execute('DROP TABLE tmp;')
-    with tqdm(songs, total=len(songs), desc='Updating...', unit='songs') as bar:
+    click.echo('Fetching songs...')
+    songs = set(map(str, get_songs(path, formats)))
+    cur.execute('CREATE TEMP TABLE tmp (path VARCHAR PRIMARY KEY);')
+    cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
+    cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
+    cur.execute('DROP TABLE tmp;')
+    with progressbar(songs, label='Updating database...') as bar:
         for song in bar:
             metadata = song_metadata(ffmpeg, song)
             if not metadata:
@@ -95,31 +73,34 @@ def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
         cur.close()
 
 
-def init_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
+def init_db(path: Path, db_path: Path, ffmpeg: str, ffplay: str):
     """
     Initialize the database
     Args:
         path: path to the music directory
-        conn: sqlite3 connection
+        db_path: path to the database
         ffmpeg: ffmpeg binary
         ffplay: ffplay binary
     """
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS library (
-        path VARCHAR PRIMARY KEY,
-        title VARCHAR,
-        genre VARCHAR,
-        artist VARCHAR,
-        album VARCHAR,
-        length REAL,
-        favourite BOOLEAN DEFAULT 0 NOT NULL,
-        listen_count INT DEFAULT 0
-        );
-        """
-    )
-    conn.commit()
-    update_db(path, conn, ffmpeg, ffplay)
+    db_path.touch()
+
+    with connect(str(db_path)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS library (
+            path VARCHAR PRIMARY KEY,
+            title VARCHAR,
+            genre VARCHAR,
+            artist VARCHAR,
+            album VARCHAR,
+            length REAL,
+            favourite BOOLEAN DEFAULT 0 NOT NULL,
+            listen_count INT DEFAULT 0
+            );
+            """
+        )
+        conn.commit()
+        update_db(path, conn, ffmpeg, ffplay)
 
 
 def next_song(conn) -> Tuple[MetaData, tuple]:

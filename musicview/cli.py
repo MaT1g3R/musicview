@@ -14,48 +14,178 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import re
+import sys
+import urllib.error
+import urllib.request
 from curses import wrapper
 from functools import partial
+from os import getenv
 from pathlib import Path
 from shutil import which
-from sys import stderr
+from sqlite3 import connect
 
 import click
 
-from .db import get_connection, init_db, update_db
+from .__version__ import __title__, __version__
+from .db import init_db, update_db
 from .player import Player
-from . import toml
 
+sys.path.append(str(Path(__file__).parent.parent / 'toml'))
+import toml
 
 DEFAULT_CONFIG_HOME = Path.home() / '.musicview'
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
-
-data_opt = click.option(
-    '-d', '--data', default=DEFAULT_CONFIG_HOME, type=Path,
-    help='Path to directory containing data and config files'
-)
-
-path_opt = click.option(
-    '-p', '--path', default=Path.cwd(), type=Path,
-    help='Path to the directory of your music library.'
-)
+CONFIG_ENVAR = 'MUSICVIEW_CONFIG_HOME'
+CONF_FILE = 'musicview.toml'
 
 print = click.echo
+fprint = partial(click.echo, file=sys.stderr)
 
-def check_path(path):
+
+class Ctx:
     """
-    Check if a path is a valid directory
-    Args:
-        path: the path to check
+    Context for the cli
     """
-    if path == DEFAULT_CONFIG_HOME:
-        path.mkdir(parents=True, exist_ok=True)
-    if not path.is_dir():
-        print('{} is not a valid directory!'.format(path), file=stderr)
-        exit(1)
+
+    def __init__(self):
+        ffplay = which('ffplay')
+        ffmpeg = which('ffmpeg')
+        if not ffplay or not ffmpeg:
+            print('ffmpeg/ffplay not found!', file=sys.stderr)
+            exit(1)
+        self.ffplay = ffplay
+        self.ffmpeg = ffmpeg
+        self.config_home = Path(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME))
+        if not (self.config_home / CONF_FILE).is_file():
+            self.setup()
+        self.config = toml.loads((self.config_home / CONF_FILE).read_text())
+        if self.config['general']['check for updates']:
+            check_update()
+
+    def setup(self):
+        """Prompt the user to do some initial setup"""
+        click.confirm(
+            f"It seems like it's your first time using {__title__}!\n"
+            f'Would you like to store configuration and metadata under'
+            f' {self.config_home}?\n'
+            f'If not, you can set the {CONFIG_ENVAR} environment variable'
+            f' to change the location.',
+            abort=True
+        )
+        try:
+            self.config_home.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            exit(e)
+
+        check_update = click.confirm(
+            'Would you like to automatically check for updates?'
+        )
+        default_config = {
+            'general': {
+                'check for updates': check_update,
+            },
+            'player control': {
+                'play/pause': 'p',
+                'skip': '>',
+                'toggle favourite': 'f',
+                'quit': 'q',
+            },
+            'library paths': {}
+        }
+        self.dump_config(default_config)
+        print(f'Configuration file has been generated at '
+              f'{self.config_home / CONF_FILE}')
+
+    def dump_config(self, cfg):
+        """
+        Dump a config dict
+        Args:
+            cfg: The config to dump
+        """
+        with (self.config_home / CONF_FILE).open('w+') as f:
+            try:
+                toml.dump(cfg, f)
+            except OSError as e:
+                exit(e)
+
+    def get_libpath(self, name):
+        """
+        Get library path by name
+        Args:
+            name: name of the library
+
+        Returns:
+            path to the library
+        """
+        return Path(self.config['library paths'][name])
+
+    def library_exists(self, name):
+        """
+        Check if a library exists
+        Args:
+            name: The name for the library
+
+        Returns:
+            if the library exists
+        """
+        return name in map(lambda p: p.name.rstrip('.db'), self.config_home.iterdir()) \
+               and name in self.config['library paths']
+
+    def delete_lib(self, name):
+        """
+        Delete a music library
+        Args:
+            name: Name of the music library
+        """
+        del self.config['library paths'][name]
+        self.dump_config(self.config)
+
+    def new_lib(self, name, path):
+        """
+        Add a new music library
+        Args:
+            name: name of the library
+            path: path of the library
+        """
+        assert name not in self.config['library paths']
+        self.config['library paths'][name] = path
+        self.dump_config(self.config)
+
+    def get_conn(self, name):
+        """
+        Get a sqlite3 connection
+        Args:
+            name: name of the library
+
+        Returns:
+            the connection
+        """
+        return connect(str(self.config_home / f'{name}.db'))
 
 
-def play_music(data, name, conn, ffplay, stdscr):
+pass_context = click.make_pass_decorator(Ctx, ensure=True)
+
+
+def check_update():
+    """Check for updates"""
+    url = ('https://raw.githubusercontent.com'
+           '/MaT1g3R/musicview/master/musicview/__version__.py')
+    try:
+        with urllib.request.urlopen(url) as resp:
+            text = resp.read().decode()
+    except urllib.error.URLError:
+        print('Could not check for updates, '
+              'are you connected to the internet?')
+    else:
+        regex = re.compile(r"__version__[\s]*=[\s]*\'(.*)\'")
+        head_version = regex.findall(text)[0]
+        t = lambda s: tuple(map(int, s.split('.')))
+        if t(head_version) > t(__version__):
+            print(f'New version ({head_version}) available!')
+
+
+def play_music(data, name, conn, ffplay, controls, stdscr):
     """
     Play some music!
     Args:
@@ -63,101 +193,94 @@ def play_music(data, name, conn, ffplay, stdscr):
         name: name of the music library
         conn: database connection
         ffplay: ffplay binary
+        controls: curses controls keymap
         stdscr: curses screen
     """
     stdscr.clear()
-    player = Player(data, name, ffplay, conn, stdscr)
+    player = Player(data, name, ffplay, conn, controls, stdscr)
     player.start()
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
-@click.pass_obj
-def cli(obj):
+@pass_context
+def cli(ctx):
     """musicview, (re)discover your music library"""
-    ffplay = which('ffplay')
-    ffmpeg = which('ffmpeg')
-    if not ffplay or not ffmpeg:
-        print('ffmpeg/ffplay not found!', file=stderr)
-        exit(1)
-
-    obj['ffplay'] = ffplay
-    obj['ffmpeg'] = ffmpeg
+    pass
 
 
 @click.command(name='list')
-@data_opt
-def list_(data: Path):
+@pass_context
+def list_(ctx):
     """List existing music libraries"""
-    check_path(data)
-    lst = [
-        p.name.rstrip('.db')
-        for p in data.iterdir()
-        if p.name.endswith('.db')
-    ]
-    if lst:
-        print('\n'.join(lst))
+    names = ctx.config['library paths']
+    if names:
+        for name, path in names.items():
+            print(f'{name} (at {path})')
     else:
         print('There are currently no music libraries!')
 
 
 @click.command()
-@path_opt
-@data_opt
 @click.argument('name')
-@click.pass_obj
-def play(obj, path: Path, data: Path, name: str):
+@pass_context
+def play(ctx, name):
     """Start playing music"""
-    check_path(path)
-    data.mkdir(exist_ok=True, parents=True)
-    ffplay = obj['ffplay']
-    ffmpeg = obj['ffmpeg']
-
-    init, conn = get_connection(data, name, False)
-    with conn:
-        if init:
-            init_db(path, conn, ffmpeg, ffplay)
-        wrapper(partial(play_music, data, name, conn, ffplay))
+    controls = {val: key for key, val in ctx.config['player control'].items()}
+    with ctx.get_conn(name) as conn:
+        wrapper(partial(play_music, ctx.config_home, name, conn, ctx.ffplay, controls))
 
 
 @click.command()
-@data_opt
 @click.argument('name')
-def delete(data: Path, name: str):
+@pass_context
+def delete(ctx, name: str):
     """Delete a music library"""
-    check_path(data)
-    to_del = data / '{}.db'.format(name)
-    if input('Delete {}? y/n '.format(name)).lower() != 'y':
-        print('Delete aborted', file=stderr)
-        exit(1)
+    to_del = ctx.config_home / f'{name}.db'
+    click.confirm(f'Delete {name}?', abort=True)
+    ctx.delete_lib(name)
+    print(f'{name} deleted!')
     try:
         to_del.unlink()
     except OSError as e:
-        print(e, file=stderr)
-    else:
-        print('{} deleted!'.format(name))
+        fprint(e)
 
 
 @click.command()
-@path_opt
-@data_opt
 @click.argument('name')
-@click.pass_obj
-def update(obj, path: Path, data: Path, name: str):
+@pass_context
+def update(ctx, name: str):
     """Update an existing music library"""
-    check_path(path)
-    ffplay = obj['ffplay']
-    ffmpeg = obj['ffmpeg']
+    if not ctx.library_exists(name):
+        exit(f'Library "{name}" does not exist!')
+    with ctx.get_conn(name) as conn:
+        update_db(ctx.get_libpath(name), conn, ctx.ffmpeg, ctx.ffplay)
 
-    if not name in map(lambda p: p.name.rstrip('.db'), data.iterdir()):
-        print('Library "{}" does not exist!'.format(name), file=stderr)
-        exit(1)
 
-    _, conn = get_connection(data, name, True)
-    with conn:
-        update_db(path, conn, ffmpeg, ffplay)
+@click.command(short_help='Create a new music library')
+@click.argument('name')
+@click.argument('path', type=click.Path(exists=True, file_okay=False))
+@pass_context
+def new(ctx, name, path):
+    """
+    Create a new music library
+
+    Arguments:
+
+        NAME: Name of the new music library
+
+        PATH: Path of the music library
+    """
+    if ctx.library_exists(name):
+        exit(f'Library with name {name} already exists!')
+    path = Path(path).resolve()
+    init_db(
+        path, ctx.config_home / f'{name}.db', ctx.ffmpeg, ctx.ffplay
+    )
+    ctx.new_lib(name, str(path))
 
 
 cli.add_command(list_)
-cli.add_command(play)
-cli.add_command(delete)
+cli.add_command(new)
 cli.add_command(update)
+cli.add_command(delete)
+cli.add_command(play)

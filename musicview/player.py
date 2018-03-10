@@ -15,13 +15,13 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import signal
+from sqlite3 import connect
 from subprocess import DEVNULL, Popen
 from threading import Condition, RLock, Thread
 from time import sleep
 
 from .db import next_song
 from .misc import format_time
-from .cli import get_connection
 
 
 class Player:
@@ -29,16 +29,18 @@ class Player:
     Music player class
     """
 
-    def __init__(self, data, name, ffplay, conn, stdscr):
+    def __init__(self, data, name, ffplay, conn, controls, stdscr):
         """
         Args:
             data: path to music library
             name: name of the music library
             ffplay: ffplay binary
             conn: database connection
+            controls: curses controls keymap
             stdscr: curses screen
         """
         self.ffplay = ffplay
+        self.controls = controls
         self.data = data
         self.name = name
         self.conn = conn
@@ -74,15 +76,14 @@ class Player:
         """
         UI control, meant to be ran in another thread
         """
-        keymap = {'p': 'play', '>': 'skip', 'f': 'favourite', 'q': 'quit'}
-        _, conn = get_connection(self.data, self.name, True)
+        conn = connect(str(self.data / self.name))
         while True:
-            cmd = keymap.get(self.stdscr.getkey())
-            if cmd == 'play':
+            cmd = self.controls.get(self.stdscr.getkey())
+            if cmd == 'play/pause':
                 self.toggle()
             elif cmd == 'skip':
                 self.play_next()
-            elif cmd == 'favourite':
+            elif cmd == 'toggle favourite':
                 self.favourite(conn)
             elif cmd == 'quit':
                 self.stopped = True
@@ -169,6 +170,7 @@ class Player:
         """
         Display text on screen
         """
+        self.stdscr.clear()
         length = self.cur_song.length
         total_time = self.cur_song.format_time()
         cur_time = format_time(self.time_elapsed)
