@@ -23,17 +23,14 @@ from subprocess import run
 
 from setuptools import setup
 
-
 HERE = Path(__file__).parent
 sys.path.append(str(HERE / 'toml'))
 import toml
-
 
 if sys.argv[-1] == 'publish':
     run(split('python setup.py sdist bdist_wheel'))
     run(split('twine upload dist/*'))
     exit()
-
 
 pipfile = toml.loads((HERE / 'Pipfile').read_text())
 lock = json.loads((HERE / 'Pipfile.lock').read_text())
@@ -65,7 +62,7 @@ setup(
         'toml/toml',
     ],
     install_requires=reqs,
-    package_data={'': ['README.rst', 'LICENSE', 'Pipfile','Pipfile.lock']},
+    package_data={'': ['README.rst', 'LICENSE', 'Pipfile', 'Pipfile.lock']},
     include_package_data=True,
     python_requires=">=3.5",
     entry_points='''
