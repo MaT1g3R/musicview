@@ -47,7 +47,10 @@ Or to install the latest development version, run:
 
 Quick Tutorial
 ================
+
 To use the command line interface
+-----------------------------------
+
 ::
 
     → musicview --help
@@ -68,16 +71,26 @@ To use the command line interface
 
 The :code:`play` command will start a simple curses music player.
 
-Curses interface controls (These will be configurable in a future release)
+Setting the configuration home
+------------------------------
+By default, musicview will store its configuration and data files
+under :code:`$HOME/.musicview`, if you would like to change that,
+you can set the :code:`MUSICVIEW_CONFIG_HOME` environment variable to
+the path you want.
+
+Default curses interface controls
+----------------------------------
 
 * :code:`p` play/pause
 * :code:`f` toggle favourite status
 * :code:`>` skip song
 * :code:`q` quit
 
+You can edit those in the :code:`musicview.toml` file under your
+configuration home.
+
 TODO
 =======
-* Configuration options
 * Tests
 * Better looking cueses UI
 * asyncio?
