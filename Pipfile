@@ -9,8 +9,6 @@ name = "pypi"
 
 click = "*"
 mutagen = "*"
-halo = "*"
-tqdm = "*"
 
 
 [dev-packages]
