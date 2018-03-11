@@ -47,13 +47,24 @@ class Ctx:
     """
     Context for the cli
     """
+    default_config = {
+        'general': {
+            'check for updates': True,
+        },
+        'player control': {
+            'play/pause': 'p',
+            'skip': '>',
+            'toggle favourite': 'f',
+            'quit': 'q',
+        },
+        'library paths': {}
+    }
 
     def __init__(self):
         ffplay = which('ffplay')
         ffmpeg = which('ffmpeg')
         if not ffplay or not ffmpeg:
-            print('ffmpeg/ffplay not found!', file=sys.stderr)
-            exit(1)
+            exit('ffmpeg/ffplay not found!')
         self.ffplay = ffplay
         self.ffmpeg = ffmpeg
         self.config_home = Path(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME))
@@ -81,19 +92,8 @@ class Ctx:
         check_update = click.confirm(
             'Would you like to automatically check for updates?'
         )
-        default_config = {
-            'general': {
-                'check for updates': check_update,
-            },
-            'player control': {
-                'play/pause': 'p',
-                'skip': '>',
-                'toggle favourite': 'f',
-                'quit': 'q',
-            },
-            'library paths': {}
-        }
-        self.dump_config(default_config)
+        self.default_config['general']['check for updates'] = check_update
+        self.dump_config(self.default_config)
         print(f'Configuration file has been generated at '
               f'{self.config_home / CONF_FILE}')
 
@@ -225,6 +225,8 @@ def list_(ctx):
 @pass_context
 def play(ctx, name):
     """Start playing music"""
+    if not ctx.library_exists(name):
+        exit(f'Library "{name}" does not exist!')
     controls = {val: key for key, val in ctx.config['player control'].items()}
     with ctx.get_conn(name) as conn:
         wrapper(partial(play_music, ctx.config_home, name, conn, ctx.ffplay, controls))
@@ -235,6 +237,8 @@ def play(ctx, name):
 @pass_context
 def delete(ctx, name: str):
     """Delete a music library"""
+    if not ctx.library_exists(name):
+        exit(f'Library "{name}" does not exist!')
     to_del = ctx.config_home / f'{name}.db'
     click.confirm(f'Delete {name}?', abort=True)
     ctx.delete_lib(name)

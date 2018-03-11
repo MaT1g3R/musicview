@@ -39,6 +39,8 @@ def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
     cur = conn.cursor()
     click.echo('Fetching songs...')
     songs = set(map(str, get_songs(path, formats)))
+    if not songs:
+        exit(f'Could not find any music files under "{path}"!')
     cur.execute('CREATE TEMP TABLE tmp (path VARCHAR PRIMARY KEY);')
     cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
     cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
