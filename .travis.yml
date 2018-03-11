@@ -1,4 +1,3 @@
-sudo: required
 language: python
 python:
   - "3.6"
@@ -6,9 +5,9 @@ python:
 
 # command to install dependencies
 before_install:
-  - sudo add-apt-repository ppa:mc3man/trusty-media -y
-  - sudo apt-get -qq update
-  - sudo apt-get install -y ffmpeg
+  - add-apt-repository ppa:mc3man/trusty-media -y
+  - apt-get -qq update
+  - apt-get install -y ffmpeg
 
 install: "make"
 
