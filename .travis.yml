@@ -5,9 +5,9 @@ python:
 
 # command to install dependencies
 before_install:
-  - add-apt-repository ppa:mc3man/trusty-media -y
-  - apt-get -qq update
-  - apt-get install -y ffmpeg
+  - sudo add-apt-repository ppa:mc3man/trusty-media -y
+  - sudo apt-get -qq update
+  - sudo apt-get install -y ffmpeg
 
 install: "make"
 
