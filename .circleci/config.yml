@@ -20,34 +20,19 @@ jobs:
           command: |
             python3 -m venv venv
             . venv/bin/activate
-            pip install pipenv!=11.3.2
-            pipenv install -d
+            make init
             sudo sh -c 'echo "deb http://ftp.debian.org/debian jessie-backports main" >> /etc/apt/sources.list'
             sudo apt-get update -y
             sudo apt-get install ffmpeg -y
-            git submodule sync
-            git submodule update --init
 
       - run:
           name: lint
           command: |
             . venv/bin/activate
-            flake8
-
-      # run tests!
-      - run:
-          name: run tests
-          command: |
-            . venv/bin/activate
-            pytest --cov=musicview tests -v
+            make lint
 
       - run:
-          name: Upload Coverage
+          name: Coverage
           command: |
             . venv/bin/activate
-            pip install codecov
-            codecov
-
-      - store_artifacts:
-          path: test-reports
-          destination: test-reports
+            make coverage
