@@ -129,8 +129,9 @@ class Ctx:
         Returns:
             if the library exists
         """
-        return name in map(lambda p: p.name.rstrip('.db'), self.config_home.iterdir()) \
-               and name in self.config['library paths']
+        return name in map(
+            lambda p: p.name.rstrip('.db'), self.config_home.iterdir()
+        ) and name in self.config['library paths']
 
     def delete_lib(self, name):
         """

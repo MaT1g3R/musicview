@@ -124,7 +124,7 @@ def next_song(conn) -> Tuple[MetaData, tuple]:
     next = cur.fetchone()
     cur.execute(
         """
-        UPDATE library SET 
+        UPDATE library SET
         listen_count = listen_count + 1
         WHERE path=?
         """, (next[0],)

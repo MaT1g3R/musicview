@@ -67,7 +67,7 @@ setup(
     python_requires=">=3.6",
     entry_points='''
         [console_scripts]
-        musicview=main:main    
+        musicview=main:main
     ''',
     classifiers=(
         'Development Status :: 3 - Alpha',

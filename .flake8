@@ -1,0 +1,18 @@
+[flake8]
+exclude =
+    # Do not track .git dir
+    .git,
+    # Do not track virtualenv dir
+    venv,
+    # Ignore folders in gitignore
+    dist,
+    build,
+    # Do not track pycache dirs
+    __pycache__,
+    .tox,
+    .idea,
+    toml,
+    tests,
+
+max-line-length = 99
+ignore = E402 E731
