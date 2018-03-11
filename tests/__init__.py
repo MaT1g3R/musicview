@@ -13,3 +13,45 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+from contextlib import contextmanager
+from os import environ, walk
+from pathlib import Path
+
+
+def get_files(p):
+    for dir, __, fs in walk(p):
+        for f in fs:
+            if f.endswith('.txt'):
+                continue
+            yield Path(dir) / f
+
+
+def file_count(p):
+    return len(list(get_files(p)))
+
+
+@contextmanager
+def export(envvars):
+    try:
+        environ.update(envvars)
+        yield
+    finally:
+        for key in envvars:
+            del environ[key]
+
+
+HERE = Path(__file__).parent
+
+SONGS = HERE / 'songs'
+HAS_LEN = SONGS / 'has_len'
+NO_LEN = SONGS / 'no_len'
+FULL_DATA = HAS_LEN / 'full_data'
+NON_FULL_DATA = HAS_LEN / 'non_full_data'
+SPAM = SONGS / 'spam'
+
+SONG_COUNT = file_count(SONGS)
+HAS_LEN_COUNT = file_count(HAS_LEN)
+NO_LEN_COUNT = file_count(NO_LEN)
+FULL_DATA_COUNT = file_count(FULL_DATA)
+NON_FULL_DATA_COUNT = file_count(NON_FULL_DATA)

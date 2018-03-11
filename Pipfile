@@ -14,3 +14,4 @@ mutagen = "*"
 [dev-packages]
 
 pytest = "*"
+coverage = "*"
