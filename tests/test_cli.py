@@ -13,6 +13,7 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 from copy import deepcopy
 from pathlib import Path
 from sqlite3 import connect
@@ -27,6 +28,7 @@ from click.testing import CliRunner
 
 from musicview import cli
 from musicview.cli import DEFAULT_CONFIG_HOME, CONF_FILE, Ctx
+
 import toml
 
 
