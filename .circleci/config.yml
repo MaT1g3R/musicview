@@ -39,4 +39,15 @@ jobs:
           name: run tests
           command: |
             . venv/bin/activate
-            pytest tests -vv
+            pytest --cov=musicview tests -v
+
+      - run:
+          name: Upload Coverage
+          command: |
+            . venv/bin/activate
+            pip install codecov
+            codecov
+
+      - store_artifacts:
+          path: test-reports
+          destination: test-reports
