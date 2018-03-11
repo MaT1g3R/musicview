@@ -36,3 +36,7 @@ jobs:
           command: |
             . venv/bin/activate
             make coverage
+notify:
+  webhooks:
+    # A list of hook hashes, containing the URL field
+    - url: "https://scalar.vector.im/api/neb/services/hooks/dHJhdmlzLWNpLyU0MHVtaSUzQW90b25va2l6YWthLmlzLWEtbGludXgtdXNlci5vcmcvJTIxWGtYcEN5UG55RVVUTmJMeEV2JTNBbWF0cml4Lm9yZw"

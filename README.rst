@@ -2,14 +2,14 @@
 musicview: (re)discover your music library
 ******************************************
 
-.. image:: https://circleci.com/gh/MaT1g3R/PyExpense.svg?style=svg
-    :target: https://circleci.com/gh/MaT1g3R/PyExpense
+.. image:: https://circleci.com/gh/MaT1g3R/musicview.svg?style=svg
+    :target: https://circleci.com/gh/MaT1g3R/musicview
 
 .. image:: https://travis-ci.org/MaT1g3R/musicview.svg?branch=master
     :target: https://travis-ci.org/MaT1g3R/musicview
 
 .. image:: https://codecov.io/gh/MaT1g3R/musicview/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/MaT1g3R/musicview
+    :target: https://codecov.io/gh/MaT1g3R/musicview
 
 
 Motivation
