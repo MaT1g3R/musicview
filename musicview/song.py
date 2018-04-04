@@ -14,15 +14,23 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from collections import Iterable, namedtuple
+from collections import Iterable
 from subprocess import DEVNULL, PIPE, run
+from typing import NamedTuple
 
 from mutagen import File, MutagenError
 
 from .misc import format_time
 
 
-class MetaData(namedtuple('MetaData', ['path', 'title', 'genre', 'artist', 'album', 'length'])):
+class MetaData(NamedTuple):
+    path: str
+    title: str
+    genre: str
+    artist: str
+    album: str
+    length: float
+
     @classmethod
     def empty(cls, path):
         """
@@ -58,9 +66,11 @@ class MetaData(namedtuple('MetaData', ['path', 'title', 'genre', 'artist', 'albu
         lst = list(self[1:])
         lst[0] = title
         lst[-1] = length
-        return ['{}: {}'.format(s, v) for s, v in
-                zip(['Title', 'Genre', 'Artist', 'Album', 'Length'], lst)
-                if v]
+        return [
+            '{}: {}'.format(s, v) for s, v in
+            zip(['Title', 'Genre', 'Artist', 'Album', 'Length'], lst)
+            if v
+        ]
 
 
 def tag_to_str(tag):
