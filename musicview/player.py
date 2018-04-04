@@ -15,7 +15,7 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from sqlite3 import connect
-from threading import Condition, RLock, Thread
+from threading import Condition, Event, RLock, Thread
 from time import sleep
 
 from musicview.db import iter_db
@@ -47,9 +47,7 @@ class Player:
 
         self.cur_song = None
         self.time_elapsed = 0
-        self.stopped = False
-
-        self.ui_thread = None
+        self.stopped = Event()
 
         self.db_lock = RLock()
         self.cv = Condition()
@@ -59,15 +57,14 @@ class Player:
         UI control, meant to be ran in another thread
         """
         conn = connect(str(self.data / f'{self.name}.db'))
-        while not self.stopped:
+        while not self.stopped.is_set():
             cmd = self.controls.get(self.stdscr.getkey())
             if cmd == 'quit':
-                self.stopped = True
+                self.stopped.set()
                 if self.cur_song:
                     self.cur_song.stop()
                 self.stdscr.clear()
                 conn.close()
-                return
             elif not self.cur_song:
                 continue
             elif cmd == 'play/pause':
@@ -86,7 +83,7 @@ class Player:
         """
         Progress bar control, meant to be ran in another thread
         """
-        while not self.stopped:
+        while not self.stopped.is_set():
             with self.cv:
                 while (not self.cur_song) or self.cur_song.paused:
                     self.cv.wait()
@@ -101,12 +98,12 @@ class Player:
         Start the music player
         """
         ui = Thread(target=self.ui, name='ui')
-        self.ui_thread = ui
         ui.start()
         progress = Thread(target=self.progress, name='progress')
         progress.start()
+
         for song in iter_db(self.conn, self.db_lock):
-            if self.stopped:
+            if self.stopped.is_set():
                 break
             with self.cv:
                 self.time_elapsed = 0
@@ -115,6 +112,7 @@ class Player:
             with self.cur_song.play(self.ffplay):
                 with self.cv:
                     self.cv.notify()
+
         ui.join()
         progress.join()
 
