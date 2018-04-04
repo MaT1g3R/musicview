@@ -26,8 +26,9 @@ from shutil import which
 from sqlite3 import connect
 
 import click
-
 import toml
+from os.path import expanduser
+
 from .__version__ import __title__, __version__
 from .db import init_db, update_db
 from .player import Player
@@ -65,7 +66,7 @@ class Ctx:
             exit('ffmpeg/ffplay not found!')
         self.ffplay = ffplay
         self.ffmpeg = ffmpeg
-        self.config_home = Path(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME))
+        self.config_home = Path(expanduser(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME)))
         if not (self.config_home / CONF_FILE).is_file():
             self.setup()
         self.config = toml.loads((self.config_home / CONF_FILE).read_text())
@@ -116,7 +117,7 @@ class Ctx:
         Returns:
             path to the library
         """
-        return Path(self.config['library paths'][name])
+        return Path(expanduser(self.config['library paths'][name]))
 
     def library_exists(self, name):
         """
@@ -261,7 +262,7 @@ def update(ctx, name: str):
 
 @click.command(short_help='Create a new music library')
 @click.argument('name')
-@click.argument('path', type=click.Path(exists=True, file_okay=False))
+@click.argument('path')
 @pass_context
 def new(ctx, name, path):
     """
@@ -275,7 +276,9 @@ def new(ctx, name, path):
     """
     if ctx.library_exists(name):
         exit(f'Library with name {name} already exists!')
-    path = Path(path).resolve()
+    path = Path(expanduser(path)).resolve()
+    if not path.is_dir():
+        exit(f'Path {path} is not a valid direcory.')
     init_db(
         path, ctx.config_home / f'{name}.db', ctx.ffmpeg, ctx.ffplay
     )
