@@ -124,7 +124,7 @@ class Player:
         """
         self.stdscr.clear()
         length = self.cur_song.meta.length
-        total_time = self.cur_song.meta.format_time()
+        total_time = format_time(self.cur_song.meta.length)
         cur_time = format_time(self.time_elapsed)
         self.stdscr.addstr(0, 1, '[paused]' if self.cur_song.paused else '[playing]')
         self.stdscr.addstr(

@@ -17,6 +17,8 @@
 from pathlib import Path
 from subprocess import DEVNULL, PIPE, run
 
+from typing import Optional
+
 
 def format_time(seconds):
     """
@@ -61,3 +63,30 @@ def get_songs(path: Path, formats):
                 yield sub.absolute()
         elif sub.is_dir():
             yield from get_songs(sub, formats)
+
+
+def get_ffmpeg_duration(ffmpeg, path) -> Optional[float]:
+    """
+    Get song duration from ffmpeg
+
+    Args:
+        ffmpeg: ffmpeg binary
+        path: path to the song
+
+    Returns:
+        song duration in seconds, if any
+    """
+    proc = run([ffmpeg, '-i', path], stdout=DEVNULL, stderr=PIPE)
+    err = proc.stderr.decode().splitlines()
+    for line in err:
+        line = line.strip().lower()
+        if line.startswith('duration'):
+            try:
+                time = line.split()[1].rstrip(',')
+                hour, minutes, seconds = time.split(':')
+                total = 60 * 60 * int(hour) + 60 * int(minutes) + float(seconds)
+            except Exception:
+                return None
+            else:
+                return total
+    return None

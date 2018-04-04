@@ -16,12 +16,12 @@
 
 import signal
 from collections import Iterable
-from subprocess import DEVNULL, PIPE, Popen, run
-from typing import NamedTuple
+from subprocess import DEVNULL, Popen
+from typing import NamedTuple, Optional
 
 from mutagen import File, MutagenError
 
-from .misc import format_time
+from .misc import format_time, get_ffmpeg_duration
 
 
 class MetaData(NamedTuple):
@@ -33,27 +33,28 @@ class MetaData(NamedTuple):
     length: float
 
     @classmethod
-    def empty(cls, path):
+    def from_path(cls, ffmpeg: str, path: str) -> Optional['MetaData']:
         """
-        Return an empty MetaData entry
+        Get song metadata from path
         Args:
+            ffmpeg: ffmpeg binary
             path: path to the song
-
         Returns:
-            empty MetaData entry
+            Song metadata if able to find its length,
+            otherwise None
         """
-        return cls(path, None, None, None, None, None)
-
-    def format_time(self):
-        """
-        Format self.length into human readable string
-        Returns:
-            The time formatted
-        """
-        if self.length:
-            return format_time(self.length)
-        else:
-            return None
+        get = lambda t, s: t.get(s, t.get(s.upper()))
+        try:
+            tags = File(path, easy=True)
+        except MutagenError:
+            tags = {}
+        title = tag_to_str(get(tags, 'title'))
+        genre = tag_to_str(get(tags, 'genre'))
+        artist = tag_to_str(get(tags, 'artist'))
+        album = tag_to_str(get(tags, 'album'))
+        length = tags.info.length if tags else None
+        length = length or get_ffmpeg_duration(ffmpeg, path)
+        return cls(path, title, genre, artist, album, length) if length else None
 
     def format(self) -> list:
         """
@@ -63,7 +64,7 @@ class MetaData(NamedTuple):
             the formatted text
         """
         title = self.title or self.path
-        length = self.format_time()
+        length = format_time(self.length)
         lst = list(self[1:])
         lst[0] = title
         lst[-1] = length
