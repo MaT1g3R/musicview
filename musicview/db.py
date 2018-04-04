@@ -14,16 +14,17 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from contextlib import contextmanager
 from itertools import chain
 from pathlib import Path
 from sqlite3 import Connection, connect
-from typing import Tuple
+from typing import Iterator
 
 import click
 from click import progressbar
 
 from .misc import get_songs, get_supported_formats
-from .song import MetaData, song_metadata
+from .song import MetaData, Song
 
 
 def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
@@ -36,48 +37,50 @@ def update_db(path: Path, conn: Connection, ffmpeg: str, ffplay: str):
         ffplay: ffplay binary
     """
     formats = set(get_supported_formats(ffplay))
-    cur = conn.cursor()
     click.echo('Fetching songs...')
     songs = set(map(str, get_songs(path, formats)))
     if not songs:
         exit(f'Could not find any music files under "{path}"!')
-    cur.execute('CREATE TEMP TABLE tmp (path VARCHAR PRIMARY KEY);')
-    cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
-    cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
-    cur.execute('DROP TABLE tmp;')
-    with progressbar(songs, label='Updating database...') as bar:
-        for song in bar:
-            metadata = song_metadata(ffmpeg, song)
-            if not metadata:
-                continue
-            assert metadata.length
-            cur.execute('SELECT * FROM library WHERE path=?', (metadata.path,))
-            if not cur.fetchone():
-                cur.execute(
-                    """
-                    INSERT INTO library (path, title, genre, artist, album, length)
-                    VALUES (?, ?, ?, ?, ?, ?);
-                    """, metadata
-                )
-            else:
-                cur.execute(
-                    """
-                    UPDATE library SET
-                    title = ?,
-                    genre = ?,
-                    artist = ?,
-                    album = ?,
-                    length = ?
-                    WHERE path=?;
-                    """, tuple(chain(metadata[1:], metadata[:1]))
-                )
+
+    with cursor(conn) as cur:
+        cur.execute('CREATE TEMP TABLE tmp (path VARCHAR PRIMARY KEY);')
+        cur.executemany('INSERT INTO tmp(path) VALUES (?);', ((s,) for s in songs))
+        cur.execute('DELETE FROM library WHERE path NOT IN (SELECT path FROM tmp);')
+        cur.execute('DROP TABLE tmp;')
+
+        with progressbar(songs, label='Updating database...') as bar:
+            for song in bar:
+                metadata = MetaData.from_path(ffmpeg, song)
+                if not metadata:
+                    continue
+                assert metadata.length
+                cur.execute('SELECT * FROM library WHERE path=?', (metadata.path,))
+                if not cur.fetchone():
+                    cur.execute(
+                        """
+                        INSERT INTO library (path, title, genre, artist, album, length)
+                        VALUES (?, ?, ?, ?, ?, ?);
+                        """, metadata
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE library SET
+                        title = ?,
+                        genre = ?,
+                        artist = ?,
+                        album = ?,
+                        length = ?
+                        WHERE path=?;
+                        """, tuple(chain(metadata[1:], metadata[:1]))
+                    )
         conn.commit()
-        cur.close()
 
 
 def init_db(path: Path, db_path: Path, ffmpeg: str, ffplay: str):
     """
     Initialize the database
+
     Args:
         path: path to the music directory
         db_path: path to the database
@@ -105,15 +108,32 @@ def init_db(path: Path, db_path: Path, ffmpeg: str, ffplay: str):
         update_db(path, conn, ffmpeg, ffplay)
 
 
-def next_song(conn) -> Tuple[MetaData, tuple]:
+@contextmanager
+def cursor(conn):
     """
-    Select the next song to play based on play counts
+    Simple contextmanager for db cursor, since sqlite3 doesn't provide one
+
     Args:
-        conn: the database connection
-    Returns:
-        metadata of the next song to play
+        conn: The db connection
     """
     cur = conn.cursor()
+    try:
+        yield cur
+    finally:
+        cur.close()
+
+
+def next_song(conn, cur) -> Song:
+    """
+    Fetch the next song with the lowest listen count in the db
+
+    Args:
+        conn: The db connection
+        cur: The db cursor
+
+    Returns:
+        Next sont in the db as a Song object
+    """
     cur.execute(
         """
         SELECT * FROM library
@@ -130,5 +150,22 @@ def next_song(conn) -> Tuple[MetaData, tuple]:
         """, (next[0],)
     )
     conn.commit()
-    cur.close()
-    return MetaData(*next[:-2]), next[-2:]
+    return Song(MetaData(*next[:-2]), bool(next[-2]), next[-1] + 1)
+
+
+def iter_db(conn, lock) -> Iterator[Song]:
+    """
+    Infinitly interate though the db for songs,
+    lowest listen count first
+
+    Args:
+        conn: The db connection
+        lock: Lock to access the db
+
+    Returns:
+        A generator of Songs
+    """
+    with cursor(conn) as cur:
+        while True:
+            with lock:
+                yield next_song(conn, cur)
