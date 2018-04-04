@@ -98,7 +98,6 @@ class Song:
         Toggle favourite status of this song
         Args:
             conn: Database connection
-            lock: Database lock
         """
         self.fav = not self.fav
         conn.execute(
