@@ -18,7 +18,7 @@ from copy import deepcopy
 from pathlib import Path
 from sqlite3 import connect
 
-from tests import HERE, SONGS, SONG_COUNT, SPAM, export, get_files
+from tests import FULL_DATA, HERE, SONGS, SONG_COUNT, SPAM, export, get_files
 
 Path.home = lambda: Path(__file__).parent / 'test_home'
 from shutil import rmtree
@@ -133,3 +133,65 @@ class TestEmpty:
         result = runner.invoke(cli, ['play', 'spam'])
         assert result.exit_code
         assert result.output.strip() == 'Library "spam" does not exist!'
+
+
+class TestOne:
+    @pytest.fixture()
+    def runner(self):
+        DEFAULT_CONFIG_HOME.mkdir(parents=True)
+        (DEFAULT_CONFIG_HOME / CONF_FILE).write_text(toml.dumps(Ctx.default_config))
+        runner = CliRunner()
+        res = runner.invoke(cli, ['new', 'full data', str(FULL_DATA)])
+        assert res.exit_code == 0
+        yield runner
+        rmtree(Path.home())
+
+    def test_list(self, runner: CliRunner):
+        result = runner.invoke(cli, ['list'])
+        assert not result.exception
+        assert not result.exit_code
+        assert 'full data' in result.output
+
+    def test_new(self, runner: CliRunner):
+        result = runner.invoke(cli, ['new', 'tmp', str(SONGS)])
+        assert not result.exit_code
+        with open(DEFAULT_CONFIG_HOME / CONF_FILE) as f:
+            cfg = toml.load(f)
+        assert cfg['library paths'] == {'full data': str(FULL_DATA), 'tmp': str(SONGS)}
+        with connect(str(DEFAULT_CONFIG_HOME / 'tmp.db')) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT path FROM library;")
+            res = cur.fetchall()
+        assert len(res) == SONG_COUNT
+        assert set(Path(p) for p, in res) == set(get_files(SONGS))
+
+    def test_new_fail(self, runner: CliRunner):
+        result = runner.invoke(cli, ['new', 'tmp', str(SPAM)])
+        assert result.exit_code
+        assert f'Could not find any music files under "{SPAM}"!' in result.output
+        with open(DEFAULT_CONFIG_HOME / CONF_FILE) as f:
+            cfg = toml.load(f)
+        assert cfg['library paths'] == {'full data': str(FULL_DATA)}
+
+    def test_new_exists(self, runner: CliRunner):
+        result = runner.invoke(cli, ['new', 'full data', str(SPAM)])
+        assert result.exit_code
+        assert f'Library with name full data already exists!' in result.output
+        with open(DEFAULT_CONFIG_HOME / CONF_FILE) as f:
+            cfg = toml.load(f)
+        assert cfg['library paths'] == {'full data': str(FULL_DATA)}
+
+    def test_update(self, runner: CliRunner):
+        result = runner.invoke(cli, ['update', 'full data'])
+        assert result.exit_code == 0
+        assert result.output.strip()
+
+    def test_delete(self, runner: CliRunner):
+        result = runner.invoke(cli, ['delete', 'full data'], input='y')
+        assert result.exit_code == 0
+        assert 'full data deleted' in result.output.strip()
+
+    def test_play(self, runner: CliRunner):
+        result = runner.invoke(cli, ['play', 'full data'], input='q')
+        assert result.exit_code == -1
+        assert not result.output
