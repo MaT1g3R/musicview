@@ -59,7 +59,7 @@ class Player:
         UI control, meant to be ran in another thread
         """
         conn = connect(str(self.data / f'{self.name}.db'))
-        while True:
+        while not self.stopped:
             cmd = self.controls.get(self.stdscr.getkey())
             if cmd == 'quit':
                 self.stopped = True
@@ -86,9 +86,7 @@ class Player:
         """
         Progress bar control, meant to be ran in another thread
         """
-        while True:
-            if self.stopped:
-                return
+        while not self.stopped:
             with self.cv:
                 while (not self.cur_song) or self.cur_song.paused:
                     self.cv.wait()
@@ -102,14 +100,14 @@ class Player:
         """
         Start the music player
         """
-        ui = Thread(target=self.ui, name='ui', daemon=True)
+        ui = Thread(target=self.ui, name='ui')
         self.ui_thread = ui
         ui.start()
-        progress = Thread(target=self.progress, name='progress', daemon=True)
+        progress = Thread(target=self.progress, name='progress')
         progress.start()
         for song in iter_db(self.conn, self.db_lock):
             if self.stopped:
-                return
+                break
             with self.cv:
                 self.time_elapsed = 0
             self.cur_song = song
@@ -117,6 +115,8 @@ class Player:
             with self.cur_song.play(self.ffplay):
                 with self.cv:
                     self.cv.notify()
+        ui.join()
+        progress.join()
 
     def display(self):
         """
