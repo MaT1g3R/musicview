@@ -27,12 +27,10 @@ from sqlite3 import connect
 
 import click
 
+import toml
 from .__version__ import __title__, __version__
 from .db import init_db, update_db
 from .player import Player
-
-sys.path.append(str(Path(__file__).parent.parent / 'toml'))
-import toml
 
 DEFAULT_CONFIG_HOME = Path.home() / '.musicview'
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])

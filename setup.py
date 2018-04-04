@@ -15,6 +15,7 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import configparser
 import json
 import sys
 from pathlib import Path
@@ -24,26 +25,26 @@ from subprocess import run
 from setuptools import setup
 
 HERE = Path(__file__).parent
-sys.path.append(str(HERE / 'toml'))
-import toml
 
 if sys.argv[-1] == 'publish':
     run(split('python setup.py sdist bdist_wheel'))
     run(split('twine upload dist/*'))
     exit()
 
-pipfile = toml.loads((HERE / 'Pipfile').read_text())
-lock = json.loads((HERE / 'Pipfile.lock').read_text())
-readme = (HERE / 'README.rst').read_text()
+config = configparser.ConfigParser()
+packages = list(config.read(HERE / 'Pipfile')['packages'])
 
-about = {}
-exec((HERE / 'musicview' / '__version__.py').read_text(), about)
+lock = json.loads((HERE / 'Pipfile.lock').read_text())
 
 reqs = [
     key + val['version'].replace('==', '>=')
     for key, val in lock['default'].items()
-    if key in pipfile['packages']
+    if key in packages
 ]
+
+about = {}
+exec((HERE / 'musicview' / '__version__.py').read_text(), about)
+readme = (HERE / 'README.rst').read_text()
 
 setup(
     name=about['__title__'],
@@ -59,7 +60,6 @@ setup(
     ],
     packages=[
         'musicview',
-        'toml/toml',
     ],
     install_requires=reqs,
     package_data={'': ['README.rst', 'LICENSE', 'Pipfile', 'Pipfile.lock']},

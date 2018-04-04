@@ -1,3 +1,0 @@
-[submodule "toml"]
-	path = toml
-	url = https://github.com/uiri/toml.git
