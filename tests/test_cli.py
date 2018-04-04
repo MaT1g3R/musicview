@@ -99,7 +99,7 @@ class TestEmpty:
         result = runner.invoke(cli, ['list'])
         assert not result.exception
         assert not result.exit_code
-        assert result.output.strip() == 'There are currently no music libraries!'
+        assert 'There are currently no music libraries!' in result.output
 
     def test_new(self, runner: CliRunner):
         result = runner.invoke(cli, ['new', 'tmp', str(SONGS)])
@@ -122,17 +122,17 @@ class TestEmpty:
     def test_update(self, runner: CliRunner):
         result = runner.invoke(cli, ['update', 'foo'])
         assert result.exit_code
-        assert result.output.strip() == 'Library "foo" does not exist!'
+        assert 'Library "foo" does not exist!' in result.output
 
     def test_delete(self, runner: CliRunner):
         result = runner.invoke(cli, ['delete', 'spam'])
         assert result.exit_code
-        assert result.output.strip() == 'Library "spam" does not exist!'
+        assert 'Library "spam" does not exist!' in result.output
 
     def test_play(self, runner: CliRunner):
         result = runner.invoke(cli, ['play', 'spam'])
         assert result.exit_code
-        assert result.output.strip() == 'Library "spam" does not exist!'
+        assert 'Library "spam" does not exist!' in result.output
 
 
 class TestOne:
@@ -194,4 +194,3 @@ class TestOne:
     def test_play(self, runner: CliRunner):
         result = runner.invoke(cli, ['play', 'full data'], input='q')
         assert result.exit_code == -1
-        assert not result.output
