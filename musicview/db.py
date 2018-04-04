@@ -168,4 +168,5 @@ def iter_db(conn, lock) -> Iterator[Song]:
     with cursor(conn) as cur:
         while True:
             with lock:
-                yield next_song(conn, cur)
+                next = next_song(conn, cur)
+            yield next
