@@ -14,11 +14,13 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import curses
 from sqlite3 import connect
 from threading import Condition, Event, Lock, Thread
 from time import sleep
 
 from musicview.db import iter_db
+from musicview.song import MetaData
 from .misc import format_time
 
 
@@ -51,6 +53,23 @@ class Player:
         self.db_lock = Lock()
         self.cv = Condition()
 
+        curses.curs_set(0)
+        stdscr.clear()
+
+        def get_y():
+            running_y = 0
+            while True:
+                sent = yield
+                yield (sent, running_y)
+                running_y += sent
+
+        heights = [1, 2, len(MetaData.__annotations__) + 1]
+        y = get_y()
+        self.playing_win, self.prog_win, self.meta_win = (
+            curses.newwin(ncol, self.width, ypos, 0) for
+            (ncol, ypos) in (y.send(h) for h, _ in zip(heights, y))
+        )
+
     def ui(self):
         """UI control, meant to be ran in another thread"""
         conn = connect(str(self.data / f'{self.name}.db'))
@@ -62,26 +81,27 @@ class Player:
                     self.cur_song.stop()
                 self.stdscr.clear()
                 conn.close()
+                return
             elif not self.cur_song:
                 continue
             elif cmd == 'play/pause':
                 if self.cur_song.toggle_pause() is False:
                     with self.cv:
                         self.cv.notify()
-                self.display()
+                self.display_playing()
             elif cmd == 'skip':
                 self.cur_song.stop()
             elif cmd == 'toggle favourite':
                 with self.db_lock:
                     self.cur_song.toggle_favourite(conn)
-                self.display()
+                self.display_metadata()
 
     def progress(self):
         """ Progress bar control, meant to be ran in another thread"""
         while not self.stopped.is_set():
             with self.cv:
                 self.cv.wait_for(lambda: self.cur_song and not self.cur_song.paused)
-                self.display()
+                self.display_progress()
                 sleep(1)
                 if self.cur_song and self.cur_song.is_done:
                     self.cur_song.stop()
@@ -105,28 +125,43 @@ class Player:
         ui.join()
         progress.join()
 
-    def display(self):
-        """ Display text on screen"""
-        self.stdscr.clear()
+    def display_progress(self):
+        """Display the current seek time/bar of the current song"""
         length = self.cur_song.meta.length
-        total_time = format_time(self.cur_song.meta.length)
-        cur_time = format_time(self.cur_song.time_played)
-        self.stdscr.addstr(0, 1, '[paused]' if self.cur_song.paused else '[playing]')
-        self.stdscr.addstr(
-            1, 1, '{}/{}'.format(cur_time, total_time)
+        cur_time = self.cur_song.time_played
+        self.prog_win.addstr(
+            0, 1, '{}/{}'.format(format_time(cur_time), format_time(length))
         )
         bar_len = self.width - 4
-        prog = int(bar_len * self.cur_song.time_played // length) - 1
+        prog = int(bar_len * cur_time // length) - 1
         if prog < 0:
             prog = 0
         empty = bar_len - prog - 1
-        self.stdscr.addstr(2, 1, '|{}{}{}|'.format(prog * '=', '>', empty * ' '))
-        self.stdscr.addstr(
-            3, 1,
+        self.prog_win.addstr(1, 1, '|{}{}{}|'.format(prog * '=', '>', empty * ' '))
+        self.prog_win.refresh()
+
+    def display_playing(self):
+        """Display playing status of the current song"""
+        self.playing_win.addstr(0, 1, '[paused]' if self.cur_song.paused else '[playing]')
+        self.playing_win.refresh()
+
+    def display_metadata(self):
+        """Display metadata infomation of the current song"""
+        self.meta_win.addstr(
+            0, 1,
             '\n '.join(
                 self.cur_song.meta.format() +
                 ['Favourite: {}'.format(self.cur_song.fav),
-                 'Play count: {}\n'.format(self.cur_song.listen_count)]
+                 'Play count: {}'.format(self.cur_song.listen_count)]
             )
         )
-        self.stdscr.refresh()
+        self.meta_win.refresh()
+
+    def display(self):
+        """ Display everything"""
+        self.meta_win.clear()
+        self.prog_win.clear()
+        self.playing_win.clear()
+        self.display_playing()
+        self.display_progress()
+        self.display_metadata()
