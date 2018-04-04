@@ -17,6 +17,7 @@
 import signal
 from collections import Iterable
 from subprocess import DEVNULL, Popen
+from time import time
 from typing import NamedTuple, Optional
 
 from mutagen import File, MutagenError
@@ -90,12 +91,31 @@ class Song:
         self.playing_proc = None
         self.paused = False
 
+        self.unpause_time = 0
+        self._time_played = 0
+
     def __bool__(self):
         return self.playing_proc is not None
+
+    @property
+    def time_played(self) -> float:
+        """Return how long this song has been playing in seconds"""
+        if not self:
+            return 0
+        if self.paused:
+            return self._time_played
+        else:
+            return self._time_played + time() - self.unpause_time
+
+    @property
+    def is_done(self) -> bool:
+        """Return wether this song is done playing"""
+        return self.time_played > self.meta.length
 
     def toggle_favourite(self, conn):
         """
         Toggle favourite status of this song
+
         Args:
             conn: Database connection
         """
@@ -118,6 +138,7 @@ class Song:
             [ffplay, '-nodisp', '-autoexit', self.meta.path],
             stderr=DEVNULL
         )
+        self.unpause_time = time()
         return self.playing_proc
 
     def toggle_pause(self) -> bool:
@@ -130,9 +151,11 @@ class Song:
         if self.paused:
             self.playing_proc.send_signal(signal.SIGCONT)
             self.paused = False
+            self.unpause_time = time()
         else:
             self.playing_proc.send_signal(signal.SIGSTOP)
             self.paused = True
+            self._time_played += time() - self.unpause_time
         return self.paused
 
     def stop(self):

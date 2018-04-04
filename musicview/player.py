@@ -46,16 +46,13 @@ class Player:
         self.height, self.width = stdscr.getmaxyx()
 
         self.cur_song = None
-        self.time_elapsed = 0
 
         self.stopped = Event()
         self.db_lock = Lock()
         self.cv = Condition()
 
     def ui(self):
-        """
-        UI control, meant to be ran in another thread
-        """
+        """UI control, meant to be ran in another thread"""
         conn = connect(str(self.data / f'{self.name}.db'))
         while not self.stopped.is_set():
             cmd = self.controls.get(self.stdscr.getkey())
@@ -80,22 +77,17 @@ class Player:
                 self.display()
 
     def progress(self):
-        """
-        Progress bar control, meant to be ran in another thread
-        """
+        """ Progress bar control, meant to be ran in another thread"""
         while not self.stopped.is_set():
             with self.cv:
                 self.cv.wait_for(lambda: self.cur_song and not self.cur_song.paused)
                 self.display()
                 sleep(1)
-                self.time_elapsed += 1
-                if self.cur_song and self.time_elapsed > self.cur_song.meta.length:
+                if self.cur_song and self.cur_song.is_done:
                     self.cur_song.stop()
 
     def start(self):
-        """
-        Start the music player
-        """
+        """Start the music player """
         ui = Thread(target=self.ui, name='ui')
         ui.start()
         progress = Thread(target=self.progress, name='progress')
@@ -104,8 +96,6 @@ class Player:
         for song in iter_db(self.conn, self.db_lock):
             if self.stopped.is_set():
                 break
-            with self.cv:
-                self.time_elapsed = 0
             self.cur_song = song
             self.display()
             with self.cur_song.play(self.ffplay):
@@ -116,19 +106,17 @@ class Player:
         progress.join()
 
     def display(self):
-        """
-        Display text on screen
-        """
+        """ Display text on screen"""
         self.stdscr.clear()
         length = self.cur_song.meta.length
         total_time = format_time(self.cur_song.meta.length)
-        cur_time = format_time(self.time_elapsed)
+        cur_time = format_time(self.cur_song.time_played)
         self.stdscr.addstr(0, 1, '[paused]' if self.cur_song.paused else '[playing]')
         self.stdscr.addstr(
             1, 1, '{}/{}'.format(cur_time, total_time)
         )
         bar_len = self.width - 4
-        prog = int(bar_len * self.time_elapsed // length) - 1
+        prog = int(bar_len * self.cur_song.time_played // length) - 1
         if prog < 0:
             prog = 0
         empty = bar_len - prog - 1
