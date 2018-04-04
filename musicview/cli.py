@@ -27,7 +27,6 @@ from sqlite3 import connect
 
 import click
 import toml
-from os.path import expanduser
 
 from .__version__ import __title__, __version__
 from .db import init_db, update_db
@@ -66,7 +65,7 @@ class Ctx:
             exit('ffmpeg/ffplay not found!')
         self.ffplay = ffplay
         self.ffmpeg = ffmpeg
-        self.config_home = Path(expanduser(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME)))
+        self.config_home = Path(getenv(CONFIG_ENVAR, DEFAULT_CONFIG_HOME)).expanduser()
         if not (self.config_home / CONF_FILE).is_file():
             self.setup()
         self.config = toml.loads((self.config_home / CONF_FILE).read_text())
@@ -117,7 +116,7 @@ class Ctx:
         Returns:
             path to the library
         """
-        return Path(expanduser(self.config['library paths'][name]))
+        return Path(self.config['library paths'][name]).expanduser()
 
     def library_exists(self, name):
         """
@@ -276,7 +275,7 @@ def new(ctx, name, path):
     """
     if ctx.library_exists(name):
         exit(f'Library with name {name} already exists!')
-    path = Path(expanduser(path)).resolve()
+    path = Path(path).expanduser().resolve()
     if not path.is_dir():
         exit(f'Path {path} is not a valid direcory.')
     init_db(
