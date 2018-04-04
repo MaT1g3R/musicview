@@ -46,7 +46,7 @@ class MetaData(NamedTuple):
         """
         get = lambda t, s: t.get(s, t.get(s.upper()))
         try:
-            tags = File(path, easy=True)
+            tags = File(path, easy=True) or {}
         except MutagenError:
             tags = {}
         title = tag_to_str(get(tags, 'title'))
