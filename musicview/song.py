@@ -14,8 +14,9 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import signal
 from collections import Iterable
-from subprocess import DEVNULL, PIPE, run
+from subprocess import DEVNULL, PIPE, Popen, run
 from typing import NamedTuple
 
 from mutagen import File, MutagenError
@@ -71,6 +72,76 @@ class MetaData(NamedTuple):
             zip(['Title', 'Genre', 'Artist', 'Album', 'Length'], lst)
             if v
         ]
+
+
+class Song:
+    def __init__(self, metadata: MetaData, fav: bool, listen_count: int):
+        """
+        Initailize this song
+        Args:
+            metadata: Song metadata
+            fav: Song favourited or not
+            listen_count: Song listen count
+        """
+        self.meta = metadata
+        self.fav = fav
+        self.listen_count = listen_count
+        self.playing_proc = None
+        self.paused = False
+
+    def __bool__(self):
+        return self.playing_proc is not None
+
+    def toggle_favourite(self, conn):
+        """
+        Toggle favourite status of this song
+        Args:
+            conn: Database connection
+            lock: Database lock
+        """
+        self.fav = not self.fav
+        conn.execute(
+            'UPDATE library SET favourite=? WHERE path=?',
+            (self.fav, self.meta.path)
+        )
+        conn.commit()
+
+    def play(self, ffplay) -> Popen:
+        """
+        Args:
+            ffplay: ffplay binary location
+
+        Returns:
+            Process that's playing this song
+        """
+        self.playing_proc = Popen(
+            [ffplay, '-nodisp', '-autoexit', self.meta.path],
+            stderr=DEVNULL
+        )
+        return self.playing_proc
+
+    def toggle_pause(self) -> bool:
+        """
+        (un)pause this song
+
+        Returns:
+            wether this song is paused or not
+        """
+        if self.paused:
+            self.playing_proc.send_signal(signal.SIGCONT)
+            self.paused = False
+        else:
+            self.playing_proc.send_signal(signal.SIGSTOP)
+            self.paused = True
+        return self.paused
+
+    def stop(self):
+        """
+        Stop playing this song
+        """
+        if self.playing_proc:
+            self.playing_proc.kill()
+            self.playing_proc = None
 
 
 def tag_to_str(tag):
