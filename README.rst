@@ -2,6 +2,9 @@
 musicview: (re)discover your music library
 ******************************************
 
+.. image:: https://badge.fury.io/py/musicview.svg
+    :target: https://badge.fury.io/py/musicview
+
 .. image:: https://circleci.com/gh/MaT1g3R/musicview.svg?style=svg
     :target: https://circleci.com/gh/MaT1g3R/musicview
 
