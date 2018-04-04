@@ -32,7 +32,8 @@ if sys.argv[-1] == 'publish':
     exit()
 
 config = configparser.ConfigParser()
-packages = list(config.read(HERE / 'Pipfile')['packages'])
+config.read(HERE / 'Pipfile')
+packages = list(config['packages'])
 
 lock = json.loads((HERE / 'Pipfile.lock').read_text())
 
