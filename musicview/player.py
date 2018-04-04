@@ -19,9 +19,9 @@ from sqlite3 import connect
 from threading import Condition, Event, Lock, Thread
 from time import sleep
 
-from musicview.db import iter_db
-from musicview.song import MetaData
+from .db import iter_db
 from .misc import format_time
+from .song import MetaData
 
 
 class Player:
@@ -45,7 +45,6 @@ class Player:
         self.name = name
         self.conn = conn
         self.stdscr = stdscr
-        self.height, self.width = stdscr.getmaxyx()
 
         self.cur_song = None
 
@@ -69,6 +68,16 @@ class Player:
             curses.newwin(ncol, self.width, ypos, 0) for
             (ncol, ypos) in (y.send(h) for h, _ in zip(heights, y))
         )
+
+    @property
+    def height(self):
+        _height, _width = self.stdscr.getmaxyx()
+        return _height
+
+    @property
+    def width(self):
+        _height, _width = self.stdscr.getmaxyx()
+        return _width
 
     def ui(self):
         """UI control, meant to be ran in another thread"""
