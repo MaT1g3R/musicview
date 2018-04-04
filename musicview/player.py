@@ -15,7 +15,7 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from sqlite3 import connect
-from threading import Condition, Event, RLock, Thread
+from threading import Condition, Event, Lock, Thread
 from time import sleep
 
 from musicview.db import iter_db
@@ -47,9 +47,9 @@ class Player:
 
         self.cur_song = None
         self.time_elapsed = 0
-        self.stopped = Event()
 
-        self.db_lock = RLock()
+        self.stopped = Event()
+        self.db_lock = Lock()
         self.cv = Condition()
 
     def ui(self):
@@ -85,8 +85,7 @@ class Player:
         """
         while not self.stopped.is_set():
             with self.cv:
-                while (not self.cur_song) or self.cur_song.paused:
-                    self.cv.wait()
+                self.cv.wait_for(lambda: self.cur_song and not self.cur_song.paused)
                 self.display()
                 sleep(1)
                 self.time_elapsed += 1
